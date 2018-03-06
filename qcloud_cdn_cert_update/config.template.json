@@ -1,0 +1,26 @@
+{
+  "domain-1.com": {
+    "action": "SetHttpsInfo",
+    "module": "cdn",
+    "https_type": 2,
+    "https_force_switch": 2,
+    "http2": "on",
+    "secret_id": "",
+    "secret_key": "",
+    "cert_filename": "",
+    "key_filename": "",
+    "validity": "20"
+  },
+  "domain-2.com": {
+    "action": "SetHttpsInfo",
+    "module": "cdn",
+    "https_type": 2,
+    "https_force_switch": 2,
+    "http2": "on",
+    "secret_id": "",
+    "secret_key": "",
+    "cert_filename": "domain-2.com.crt",
+    "key_filename": "domain-2.com.key",
+    "validity": "20"
+  }
+}
