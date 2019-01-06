@@ -1,61 +1,42 @@
 import datetime
 import gzip
-import os
-import subprocess
 import sys
+import json
 
 import requests
 from QcloudApi.qcloudapi import QcloudApi
 
-tmp_file_path = sys.path[0] + '/.qcloud_cdn_log_download_main.tmp'
-log_tmp_file_path = sys.path[0] + '/log_tmp/'
-log_file_path = sys.path[0] + '/log/'
+tmp_file_path = sys.path[0] + '/.tmp.log'
+log_file_path = sys.path[0] + '/download.log'
+log_zip_file_path = sys.path[0] + '/log_zip/'
+log_unzip_file_path = sys.path[0] + '/log_txt/'
+config_file_path = sys.path[0] + '/config.json'
 
-if os.path.exists(tmp_file_path):
-    tmp_file_content = subprocess.Popen('/usr/bin/tail -n 1 ' + tmp_file_path, shell=True, stdout=subprocess.PIPE)
-    tmp_file_content = tmp_file_content.stdout.readlines()[0]
-    tmp_file_content = eval(tmp_file_content)
-    start_date = tmp_file_content['log_date']
-    tmp_file_content_statue = tmp_file_content['statue']
+# 定义变量
+config_json = {}
+
+# 读取配置文件
+try:
+    open_config = open(config_file_path, 'r')
+except IOError as e:
+    print(str(e))
+    exit(1)
 else:
-    start_date = '2018010100'
+    config_content = open_config.read()
+    config_json = json.loads(config_content)
+    open_config.close()
+
+# 读取临时文件
+try:
+    open_tmp_file = open(tmp_file_path, 'r')
+except IOError:
+    start_date = False
+else:
+    start_date = open_tmp_file.read()
+    open_tmp_file.close()
 
 datetime_now = datetime.datetime.now()
 date_now = datetime_now.strftime("%Y-%m-%d %H:%M:%S")
-end_date = datetime_now.strftime("%Y-%m-%d %H:00:00")
-
-last_log_time = datetime.datetime.strptime(start_date, '%Y%m%d%H')
-time_calculate = (datetime_now - last_log_time).seconds
-if time_calculate > 4500:
-    need_to_download_log = True
-    start_date = datetime.datetime.strftime(last_log_time, '%Y-%m-%d %H:00:00')
-else:
-    need_to_download_log = False
-
-# 模块
-module = 'cdn'
-
-# 接口
-action = 'GetCdnLogList'
-
-# 区域
-
-secret_id = ''
-secret_key = ''
-host_name = ''
-
-config = {
-    'Region': 'gz',
-    'secretId': secret_id,
-    'secretKey': secret_key,
-    'method': 'get'
-}
-
-params = {
-    'host': host_name,
-    'startDate': str(start_date),
-    'endDate': str(end_date)
-}
 
 
 def process_output(i):
@@ -77,45 +58,49 @@ def process_output(i):
 
 def download_log_file(i, j):
     r = requests.get(j, stream=True)
-    with open(log_tmp_file_path + i + '.gz', 'wb') as gz:
-        for chunk in r.iter_content(chunk_size=1024):
-            if chunk:
-                gz.write(chunk)
-    gz.close()
+    print(type(r.status_code))
+    if r.status_code == 200:
+        with open(log_zip_file_path + i + '.gz', 'wb') as gz:
+            for chunk in r.iter_content(chunk_size=1024):
+                if chunk:
+                    gz.write(chunk)
+        gz.close()
+        return True
+    else:
+        return r.status_code
 
 
 def uncompress_log_file(i):
-    log_gzip = gzip.open(log_tmp_file_path + i + '.gz', 'rb')
-    log_text = open(log_file_path + i + '.log', 'wb')
+    log_gzip = gzip.open(log_zip_file_path + i + '.gz', 'rb')
+    log_text = open(log_unzip_file_path + i + '.log', 'wb')
     log_content = log_gzip.read()
     log_text.write(log_content)
     log_gzip.close()
     log_text.close()
 
 
-def script_log(i, j, k, l):
+def write_log_file(i, j, k, l):
     script_log_dict = dict()
     script_log_dict['date_now'] = i
     script_log_dict['log_date'] = j
     script_log_dict['statue'] = k
     script_log_dict['message'] = l
-    script_log_write = open(tmp_file_path, 'a+')
-    script_log_write.write(str(script_log_dict) + '\n')
+    script_log_write = open(log_file_path, 'a+')
+    script_log_write.write('download_date:' + str(i) + ' log_name:' + str(j) + ' statue:' + k + ' message:' + l + '\n')
     script_log_write.close()
 
 
-if need_to_download_log:
-    service = QcloudApi(module, config)
-    secretId = secret_id
-    service.setSecretId(secretId)
-    secretKey = secret_key
-    service.setSecretKey(secretKey)
-    region = 'gz'
-    service.setRegion(region)
-    method = 'post'
-    service.setRequestMethod(method)
-    service.generateUrl(action, params)
-    qcloud_output = service.call(action, params).decode()
+def write_tmp_log(log_date):
+    open_file = open(tmp_file_path, 'w')
+    open_file.write(str(log_date))
+    open_file.close()
+
+
+def get_download_link(params, config):
+    service = QcloudApi('cdn', config)
+    service.setRequestMethod('post')
+    service.generateUrl('GetCdnLogList', params)
+    qcloud_output = service.call('GetCdnLogList', params).decode()
     qcloud_output = process_output(qcloud_output)
     if qcloud_output[0] is False:
         qcloud_output_loop = 0
@@ -124,14 +109,51 @@ if need_to_download_log:
             if qcloud_output[0] is not False:
                 break
             qcloud_output_loop += 1
-else:
-    qcloud_output = False, None
+    return qcloud_output
 
-if qcloud_output[0] is not False:
-    for key, value in qcloud_output[1].items():
-        download_link = value.replace('\\', '')
-        download_log_file(key, download_link)
-        uncompress_log_file(key)
-    script_log(str(date_now), qcloud_output[0], qcloud_output[2], 'None')
-else:
-    script_log(str(date_now), start_date, 'Failure', qcloud_output[1])
+
+def download_log(qcloud_output):
+    if qcloud_output[0] is not False:
+        for key, value in qcloud_output[1].items():
+            download_link = value.replace('\\', '')
+            download_status = download_log_file(key, download_link)
+            if download_status is True:
+                uncompress_log_file(key)
+            else:
+                pass
+            write_log_file(str(date_now), key, str(download_status), 'None')
+    else:
+        write_log_file(str(date_now), start_date, 'Failure', qcloud_output[1])
+
+
+if __name__ == '__main__':
+    cdn_config = {
+        'Region': 'gz',
+        'secretId': config_json['secret_id'],
+        'secretKey': config_json['secret_key'],
+        'method': 'get'
+    }
+
+    if start_date is False:
+        cdn_params = {
+            'host': config_json['host_name']
+        }
+        cdn_log_download_link = get_download_link(cdn_params, cdn_config)
+        download_log(cdn_log_download_link)
+        write_tmp_log(date_now)
+    else:
+        last_log_time = datetime.datetime.strptime(start_date, '%Y-%m-%d %H:%M:%S')
+        time_calculate = (datetime_now - last_log_time).seconds
+        if time_calculate > 4500:
+            start_date = datetime.datetime.strftime(last_log_time, '%Y-%m-%d %H:00:00')
+            end_date = datetime_now.strftime("%Y-%m-%d %H:00:00")
+            cdn_params = {
+                'host': config_json['host_name'],
+                'startDate': str(start_date),
+                'endDate': str(end_date)
+            }
+            cdn_log_download_link = get_download_link(cdn_params, cdn_config)
+            download_log(cdn_log_download_link)
+            write_tmp_log(date_now)
+        else:
+            pass
