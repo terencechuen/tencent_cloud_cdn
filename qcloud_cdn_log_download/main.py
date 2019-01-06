@@ -44,21 +44,18 @@ def process_output(i):
     i = eval(i)
     if i['code'] == 0 and i['codeDesc'] == 'Success':
         i_data = i['data']['list']
-        log_date = i_data[-1]
-        log_date = log_date['name'].split('-')[0]
-        log_status = i['codeDesc']
         for j in i_data:
-            log_filename = j['name']
-            log_download_link = j['link']
-            download_dict[log_filename] = log_download_link
-        return log_date, download_dict, log_status
+            if j['type'] == 1:
+                download_dict[j['name']] = j['link']
+            else:
+                pass
+        return True, download_dict
     else:
         return False, i['message']
 
 
 def download_log_file(i, j):
     r = requests.get(j, stream=True)
-    print(type(r.status_code))
     if r.status_code == 200:
         with open(log_zip_file_path + i + '.gz', 'wb') as gz:
             for chunk in r.iter_content(chunk_size=1024):
