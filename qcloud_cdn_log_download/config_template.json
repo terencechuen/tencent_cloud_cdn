@@ -2,7 +2,7 @@
   "secret_id": "",
   "secret_key": "",
   "host_name": [
-    "1",
-    "2"
+    "domain_1",
+    "domain_2"
   ]
 }
